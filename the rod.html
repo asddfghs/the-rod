@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>巴拉莱卡：宿命轮回</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;600;900&display=swap');
+        
+        body, html { margin: 0; padding: 0; height: 100%; background: #050505; color: #a0a0a0; font-family: 'Noto Serif SC', serif; overflow: hidden; }
+        #snow-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; opacity: 0.6; transition: all 2s ease; }
+        .vignette { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at center, transparent 10%, #000 130%); z-index: 5; pointer-events: none; }
+        
+        .scene { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 1.2s ease; padding: 0 15%; box-sizing: border-box; z-index: 10; opacity: 0; pointer-events: none; }
+        .scene.active { opacity: 1; pointer-events: auto; }
+        
+        p { line-height: 2.8; font-size: 1.25rem; margin-bottom: 1.5rem; letter-spacing: 0.15rem; text-indent: 2.5em; color: #ccc; }
+        .emphasis { color: #fff; border-bottom: 1px solid #700; }
+        .blood { color: #900; font-weight: 900; text-shadow: 0 0 15px rgba(150,0,0,0.5); }
+        
+        .command { 
+            display: block; 
+            text-align: center; 
+            font-size: 1.6rem; 
+            font-weight: 900; 
+            color: #fff; 
+            letter-spacing: 0.4rem; 
+            padding: 1.5rem 0; 
+            text-indent: 0; 
+            text-shadow: 0 0 20px rgba(255,255,255,0.2);
+        }
+
+        .controls { display: flex; justify-content: center; gap: 1.5rem; margin-top: 2rem; flex-wrap: wrap; }
+        .btn { padding: 1.1rem 2.2rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); color: #888; cursor: pointer; transition: 0.4s; font-family: inherit; letter-spacing: 0.2rem; font-size: 0.95rem; }
+        .btn:hover { background: #fff; color: #000; transform: translateY(-3px); box-shadow: 0 0 20px rgba(255,255,255,0.1); }
+        .btn-violence:hover { background: #800; color: #fff; border-color: #800; box-shadow: 0 0 40px rgba(128,0,0,0.5); }
+
+        .final-echo { font-size: 1.65rem; text-align: center; text-indent: 0 !important; color: #fff; animation: breathe 4s infinite ease-in-out; line-height: 2.5; }
+        @keyframes breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+        
+        .flash { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+        .shaking { animation: shake 0.4s ease-in-out; }
+        @keyframes shake { 0%, 100% { transform:translate(0,0); } 20% { transform:translate(-15px,8px); } 40% { transform:translate(15px,-8px); } }
+    </style>
+</head>
+<body>
+
+<canvas id="snow-canvas"></canvas>
+<div class="vignette"></div>
+<div id="flash" class="flash"></div>
+
+<div id="scene-selector" class="scene active">
+    <h1 style="font-size: 3.2rem; letter-spacing: 1.2rem; color: #fff; text-align: center;">巴拉莱卡：宿命轮回</h1>
+    <p style="text-align: center; text-indent: 0; color: #555; letter-spacing: 0.5rem;">圣彼得堡的雪，没有出口</p>
+    <div class="controls">
+        <button class="btn" onclick="initExperience('son')">扮演继承者</button>
+        <button class="btn" onclick="initExperience('observer')">扮演旁观者</button>
+    </div>
+</div>
+
+<div id="story-engine" class="scene">
+    <div id="content-area"></div>
+    <div class="controls" id="btn-area"></div>
+</div>
+
+<script>
+    let role = ''; let step = 0; 
+    let audioCtx, windGain, filter;
+
+    function unlockAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            windGain = audioCtx.createGain();
+            filter = audioCtx.createBiquadFilter();
+            const noise = audioCtx.createBufferSource();
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+            noise.buffer = buffer; noise.loop = true;
+            filter.type = 'lowpass'; filter.frequency.setValueAtTime(300, audioCtx.currentTime);
+            windGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            noise.connect(filter); filter.connect(windGain); windGain.connect(audioCtx.destination);
+            noise.start();
+        }
+    }
+
+    const stories = {
+    son: [
+        { 
+            text: "觥筹交错之间，我感到一束刺眼的强光，那一束光来自父亲袖口的<span class='emphasis'>宝石扣子</span>的反射。我被迫站在他身侧，当他伸手示意我噤声时，我闻到他衬衫上微弱的<span class='emphasis'>雪水的清冽</span>————那是种让人不寒而栗的味道。", 
+            btns: [{text: "听他的高谈阔论"}] 
+        },
+        { 
+            text: "他披着一件<span class='emphasis'>黑色的貂皮大衣</span>，正对着宾客大声宣讲：‘权杖传了几代，规则从未变过：<span class='blood'>棍棒之下才有孝子，拳头之中方出规则。</span>’他把手搭在我的肩上，像炫耀战利品般向台下的宾客介绍：‘这是我的儿子，他终将会以我为傲。’全场响起了整齐而轰动的掌声。而我只想赶快逃离这片将‘暴力’奉为圣经的地方。", 
+            btns: [{text: "尝试逃离这里"}] 
+        },
+        { 
+            text: "这天，圣彼得堡的雪下的很大，我扎进没膝的<span class='emphasis'>深雪</span>，肺部因为吸入的寒气而感到剧烈灼烧。回头望去，父亲在露台上优雅举杯，他在风雪中俯视着我，像看一只注定冻死的蝼蚁。我被吓得差点摔倒，却一步也不敢停下。我在昏迷中苏醒，却感到一阵强风迎来，那是他的巴掌。巴掌声落，我脸上划下一道血痕——由于力度太大，他袖口的宝石扣划破了我的脸颊：<br><br><span class='command'>“嗯？不服？不服也给我乖乖跪下。”</span>", 
+            btns: [{text: "隐忍，直到极夜终结"}] 
+        },
+        { 
+            text: "十年后的深夜。那个耳光再次扬起。但这一次，我长大了。<span class='blood'>我死死按住了他的手腕。</span>我清晰地感受到那层皮囊下骨骼的苍老。我抡圆了胳膊，将这数十年的压抑全部化作这一掌。", 
+            btns: [{text: "扇回去", type: "violence"}] 
+        },
+        { 
+            text: "那一记耳光震碎了老头胸口<span class='emphasis'>雪白的鹅绒胸花</span>。我夺过那根沉重的权杖，挥向他的膝盖。在<span class='blood'>骨头断裂的清脆回响</span>中，我捡起了那件掉在地上的黑貂大衣披在身上：‘父亲，您也感到不服吗？不服……也请您乖乖跪下。’", 
+            btns: [{text: "继承这把权杖"}] 
+        },
+        { 
+            text: "多年以后，我低头理了理心口洁白的<span class='emphasis'>鹅绒</span>——就像当年他扇完我耳光后随手整理领口那样。地上是打翻了的酒杯，我俯视着双眼血丝盯着我的儿子，从那双眼睛里，我认出了当年的自己。我感到了某种宿命般的欣慰：他终于也长成了这种充满恨意的样子。", 
+            btns: [
+                { 
+                    text: "“没错，就是这种眼神。”", 
+                    nextText: "<span class='final-echo'>你在他眼里看到了纯粹的恨，那是你留给他的、比权杖更昂贵的遗产。<br>在这个极夜里，唯有痛苦能让他活下去。<br><br><span class='blood'>Отлично</span></span>" 
+                },
+                { 
+                    text: "“不服？不服也给我乖乖跪下。”", 
+                    nextText: "<span class='final-echo'>你重复着多年前那句让你痛恨入骨的台词，却感到了前所未有的安稳。<br>暴力完成了它的闭环，你终于亲手杀死了那个曾经想在雪夜逃跑的自己。<br><br><span class='blood'>Отлично</span></span>" 
+                },
+                { 
+                    text: "拍一拍他愤怒的脸颊", 
+                    nextText: "<span class='final-echo'>在指尖触碰到他的一刻，你耳边突然响起了多年前那声穿透耳膜的震颤。<br>这种残忍的语言，是从你旧伤里渗出的血，又原封不动地<span class='blood'>涂抹在了他稚嫩的脸上</span><br><br><span class='blood'>Отлично</span></span>" 
+                }
+            ]
+        }
+    ],
+    observer: [
+        { 
+            text: "我端着一杯冰冷的伏特加，注视着这场病态的聚会。巴拉莱卡是这场宴会的主人，当他与我擦身而过时，我闻到他那件挺括的<span class='emphasis'>亚麻衬衫</span>发出的冷冽雪松的气息——我确信那是种被金钱精确打理出来的‘体面’。", 
+            btns: [{text: "在远处注视这场宣誓"}] 
+        },
+        { 
+            text: "“巴拉莱卡！”人群的欢呼几乎要把天花板掀翻。他挥舞着手中的<span class='emphasis'>权杖</span>，宣称疼痛是‘最诚实的教育’。没有人质疑，在这里，质疑规则意味着你不属于这光怪陆离的名利场。", 
+            btns: [{text: "目睹这场逃离"}] 
+        },
+        { 
+        text: "少年试图跑进庄园外的深雪，但巴拉莱卡只是在露台俯瞰。上帝俯视蝼蚁的姿态，比棍棒更让人绝望。", 
+        btns: [{text: "在沉默中将酒一饮而尽"}] 
+    },
+        { 
+            text: "多年以后我再次受到宴会的邀请，只不过这一次邀请人变成了巴拉莱卡的儿子。他披上了那件象征权力与地位的<span class='emphasis'>黑貂大衣</span>，举止却比他的父亲更加冷酷。我再次举杯，向这位新的巴拉莱卡隔空碰杯：<span class='blood'>‘Отлично’</span>。", 
+            btns: [
+                { 
+                    text: "向这位新王隔空碰杯", 
+                    nextText: "<span class='final-echo'>你隔空碰杯<br>你清醒地看着规则在血脉中完成交接，旧的少年已死，新的暴君已立。<br>酒很烈，辣得你流下了生理性的泪水。<br><br><span class='blood'>Отлично</span></span>" 
+                },
+                { 
+                    text: "转头避开孩子的目光", 
+                    nextText: "<span class='final-echo'>你盯着杯中融化的冰块，不敢看那双颤抖的眼睛。<br>你救不了任何人，就像当年救不了你自己。在这场轮回里，你只是一粒<span class='emphasis'>清醒的尘埃</span>。<br><br><span class='blood'>Отлично</span></span>" 
+                },
+                { 
+                    text: "在喧嚣中起身离席", 
+                    nextText: "<span class='final-echo'>推开大门，圣彼得堡的雪风依旧刺骨。<br>当你对规则发出质疑时，意味着你<span class='blood'>再也不属于这里了</span>。<br><br><span class='blood'>Отлично</span></span>" 
+                }
+            ]
+        }
+    ]
+};
+
+    function initExperience(sel) {
+        unlockAudio(); role = sel; step = 0;
+        document.getElementById('scene-selector').classList.remove('active');
+        setTimeout(() => { document.getElementById('story-engine').classList.add('active'); renderStep(); }, 1000);
+    }
+
+    function renderStep() {
+        const data = stories[role][step];
+        const area = document.getElementById('content-area');
+        const btnArea = document.getElementById('btn-area');
+        area.style.opacity = '0';
+        setTimeout(() => {
+            area.innerHTML = `<p>${data.text}</p>`;
+            btnArea.innerHTML = '';
+            data.btns.forEach(b => {
+                const btn = document.createElement('button');
+                btn.className = `btn ${b.type === 'violence' ? 'btn-violence' : ''}`;
+                btn.innerHTML = b.text;
+                btn.onclick = () => {
+                    if (b.type === 'violence') executeViolence();
+                    else if (b.nextText) triggerFinalCollapse(b.nextText);
+                    else { step++; renderStep(); }
+                };
+                btnArea.appendChild(btn);
+            });
+            area.style.opacity = '1';
+        }, 600);
+    }
+
+    function triggerFinalCollapse(finalMsg) {
+        const now = audioCtx.currentTime;
+        if (finalMsg.includes("大门")) {
+            filter.frequency.exponentialRampToValueAtTime(2500, now + 2);
+            windGain.gain.exponentialRampToValueAtTime(0.3, now + 2);
+            document.getElementById('snow-canvas').style.opacity = "0.8";
+        } else if (finalMsg.includes("冰块")) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(1000, now);
+            g.gain.setValueAtTime(0.1, now);
+            g.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(now + 0.1);
+        }
+
+        document.getElementById('content-area').style.opacity = '0';
+        document.getElementById('btn-area').style.opacity = '0';
+        setTimeout(() => {
+            document.getElementById('content-area').innerHTML = `<p class="final-echo">${finalMsg}</p>`;
+            // 修改结局按钮文本
+            document.getElementById('btn-area').innerHTML = `<button class="btn" onclick="location.reload()">开启再一次轮回</button>`;
+            document.getElementById('content-area').style.opacity = '1';
+            document.getElementById('btn-area').style.opacity = '1';
+        }, 1200);
+    }
+
+    function executeViolence() {
+        document.body.classList.add('shaking');
+        document.getElementById('flash').style.opacity = '1';
+        if(audioCtx) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1, audioCtx.currentTime + 0.5);
+            g.gain.setValueAtTime(0.7, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+        }
+        setTimeout(() => {
+            document.getElementById('flash').style.opacity = '0';
+            document.body.classList.remove('shaking');
+            step++; renderStep();
+        }, 500);
+    }
+
+    const canvas = document.getElementById('snow-canvas');
+    const ctx = canvas.getContext('2d');
+    let w, h, flakes;
+    function initSnow() {
+        w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight;
+        flakes = Array.from({length: 400}, () => ({ 
+            x: Math.random()*w, 
+            y: Math.random()*h, 
+            s: Math.random()*3 + 1, 
+            v: Math.random()*2.5 + 1.2 
+        }));
+    }
+    function draw() {
+        ctx.clearRect(0,0,w,h); ctx.fillStyle = "rgba(255,255,255,0.7)";
+        flakes.forEach(f => {
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.s, 0, Math.PI*2); ctx.fill();
+            f.y += f.v; if (f.y > h) f.y = -5;
+        });
+        requestAnimationFrame(draw);
+    }
+    initSnow(); draw();
+    window.onresize = initSnow;
+</script>
+</body>
+</html>
